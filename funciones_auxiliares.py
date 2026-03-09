@@ -19,11 +19,14 @@ from collections import Counter
 from IPython.display import display
 from matplotlib.axes import Axes
 from matplotlib.collections import LineCollection
+from matplotlib.colors import Normalize
+from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.colors import to_rgba
 from matplotlib.figure import Figure
 from scipy.spatial import ConvexHull
 from sklearn.neighbors import KernelDensity
 from tqdm.notebook import tqdm
+
 
 
 
@@ -1197,4 +1200,341 @@ def migracion_argentina(
     fig.tight_layout()
     plt.savefig(f'resultados/red_migra_argentina_{año}.png', bbox_inches='tight', dpi=300) 
     plt.close()
+    return fig
+
+
+
+def red_ego_pais(
+    pct_datos: int,
+    dicc_migras_econ: dict[int, pd.Dataframe],
+    pais: str,
+    año: int, 
+    puntajes: dict[str, float],
+    df_idh: pd.DataFrame,
+    idh: bool=False,
+    **args
+) -> Figure:
+    
+    # Obtenemos los datos del país
+    df = dicc_migras_econ[año].copy()
+    df = df.query('iso2_orig == @pais | iso2_des == @pais')
+    
+    # Puntajes de países involucrados (para colorear el mapa)
+    dicc_orig = {c:v for c,v in zip(list(df.iso3_orig.values), list(df.puntaje_orig.values))}
+    dicc_des = {c:v for c,v in zip(list(df.iso3_des.values), list(df.puntaje_des.values))}
+    dicc_paises_involucrados = dicc_orig | dicc_des
+    
+    # Valores para normalizar grosor aristas y tamaño nodos
+    migra_max = df.migrantes.max()       
+    max_orig, max_des = df.loc[df['migrantes'].idxmax(), ['iso2_orig', 'iso2_des']]
+    paises_max_migra = f'{max_orig} --> {max_des}'
+    migra_min = df.migrantes.min()    
+    min_orig, min_des = df.loc[df['migrantes'].idxmin(), ['iso2_orig', 'iso2_des']]
+    paises_min_migra = f'{min_orig} --> {min_des}'
+
+    # Creo un dicc con los valores del idh de cada país involucrado
+    if idh:
+        df_idh = df_idh[df_idh.año == año]
+        dicc_idh = {
+            c:v 
+            for c,v in zip(
+                list(df_idh.iso3_econ.values),
+                list(df_idh.hdi.values)
+            )
+        }
+
+    # Construimos la red de migraciones
+    red = nx.DiGraph()    
+    for _, fila in df.iterrows():
+        
+        # Países        
+        origen = fila.iso2_orig
+        destino = fila.iso2_des
+        
+        # Ubicaciones
+        x_orig, y_orig = fila.lon_orig, fila.lat_orig
+        x_des, y_des = fila.lon_des, fila.lat_des
+        
+        # Migrantes ( normalización grosor aristas)
+        migrantes = fila.migrantes / migra_max    
+        
+        # Puntajes
+        puntaje_orig = fila.puntaje_orig
+        puntaje_des = fila.puntaje_des
+        dif_puntaje = fila.dif_puntaje
+        
+        # Agregamos nodos y enlace a la red
+        red.add_node(
+            origen, 
+            pos=(x_orig, y_orig),
+            puntaje=puntaje_orig,
+        )
+        red.add_node(
+            destino,
+            pos=(x_des, y_des),
+            puntaje=puntaje_des,
+        )
+        red.add_edge(
+            origen,
+            destino,
+            weight=migrantes,
+            dif_puntaje=dif_puntaje,
+        )
+
+    # CONFIGURACIÓN GRAL. DE LA VISUALIZACIÓN
+    dpi = args.get('dpi', 300)
+    tam_figura = args.get('tam_figura', (20,10))  
+    # Colores del mapa
+    agua = args.get('agua','#e6e6e6')
+    tierra = args.get('tierra', '#b0b0b0')
+    fronteras = args.get('fronteras', '#dfdfdf')
+    continentes = args.get('continentes', '#8a8a8a')   
+    # Colores de la red
+    color_emigracion = args.get('color_emigracion', '#ff9d00')
+    color_inmigracion = args.get('color_inmigracion', '#3564ff')#1f218a
+    color_etq_pais = args.get('color_etq_pais', '#101010')
+    alfa_aristas = args.get('alfa_aristas', .9)
+    alfa_etiquetas = args.get('alfa_etiquetas', .8)
+    # Tamaños textos
+    tam_tex_etq = args.get('tam_tex_etq', 13) # Códigos de países
+    tam_tex_ref = args.get('tam_tex_ref', 12) # Referencias
+    # Márgenes que permiten regular el zoom sobre el mapa
+    enfocar = args.get('enfocar', False)
+    margen_izq = args.get('margen_izq', 0)
+    margen_sup = args.get('margen_sup', 0)    
+    margen_der = args.get('margen_der', 0)
+    margen_inf = args.get('margen_inf', 0)
+    # Ubicación y fondo de las referencias
+    ubic_ref = args.get('ubic_ref', 'lower left')
+    fondo_ref = args.get('fondo_ref', False)
+    # Otros
+    grosor_bordes_paises = args.get('grosor_bordes_paises', .6)
+    grosor_bordes_continentes = args.get('grosor_bordes_continentes', .7)
+    tam_tex_barra = args.get('tam_tex_barra', 13)
+    aspecto_barra = args.get(
+        'aspecto_barra',{'fraction': 0.01, 'aspect': 70, 'pad': 0.02}
+    )
+
+    
+    fig, eje = plt.subplots(
+        figsize=tam_figura, 
+        dpi=dpi,
+        subplot_kw={'projection': ccrs.Robinson()}
+    )    
+    fig.set_facecolor('white')
+    eje.set_facecolor(agua) 
+    eje.add_feature(cfeature.LAND, facecolor=tierra)
+    eje.add_feature(cfeature.OCEAN, facecolor=agua)
+    eje.add_feature(
+        cfeature.COASTLINE,
+        edgecolor=continentes,
+        linewidth=grosor_bordes_continentes,
+        zorder=1
+    )
+    eje.add_feature(
+        cfeature.BORDERS,
+        edgecolor=fronteras,
+        linewidth=grosor_bordes_paises,
+        zorder=1
+    )
+    
+    # DATOS ECONÓMICOS DE LOS PAÍSES INVOLUCRADOS     
+    transicion = LinearSegmentedColormap.from_list( # Mapa de color
+        'rv', ['#ff4343', '#00ef93']
+    )
+
+    forma_paises = shpreader.natural_earth(
+        resolution='110m',
+        category='cultural',
+        name='admin_0_countries'
+    )
+    lector = shpreader.Reader(forma_paises)
+
+
+    for datos_pais in lector.records():
+        iso3 = datos_pais.attributes['ISO_A3']
+        nombre = datos_pais.attributes['NAME']  
+        if nombre == 'France': # Ir agregando si descubrimos más que dan problemas
+            iso3 = 'FRA'
+        if iso3 in dicc_paises_involucrados.keys():
+            poligono_pais = datos_pais.geometry
+
+            if not idh:
+                valor = dicc_paises_involucrados[iso3]
+            else:
+                valor = dicc_idh[iso3]
+
+            if (valor != 0.0 and not pd.isna(valor)): # El país tiene dato económico
+                eje.add_geometries(
+                    [poligono_pais],
+                    crs=ccrs.PlateCarree(),
+                    edgecolor='black',
+                    linewidth=grosor_bordes_paises,
+                    facecolor=transicion(valor),
+                    alpha=1,
+                    zorder=1,
+                )
+            else: # El país no tiene dato economico
+                eje.add_geometries(
+                    [poligono_pais],
+                    crs=ccrs.PlateCarree(),
+                    edgecolor=continentes,
+                    linewidth=grosor_bordes_paises,
+                    facecolor='white',
+                    alpha=1,
+                    hatch='///////',
+                    zorder=1
+                )    
+
+    # Texto bajo la barra de color
+    if not idh:
+        formula = ''
+        for c,v in puntajes.items():
+            if c != 'PBI':
+                formula += f'{v}(1 - {c}) + '
+            else:
+                formula += f'{v}{c} + '
+        tex_barra = f'Puntaje = {formula[:-2]}'
+    else:
+        tex_barra = 'Índice de Desarrollo Humano'
+    rango_barra = Normalize(vmin=0, vmax=1)
+    rango_a_color = plt.cm.ScalarMappable(cmap=transicion, norm=rango_barra)
+    rango_a_color.set_array([])
+    barra_color = plt.colorbar(
+        rango_a_color,
+        ax=eje,
+        # label=tex_barra,
+        orientation='horizontal',
+        **aspecto_barra
+    )
+    barra_color.set_label(tex_barra, fontsize=tam_tex_barra)
+
+    # RED 
+    pos_nodos = nx.get_node_attributes(red, 'pos')
+    pos_proj = {}
+    for n, (lon, lat) in pos_nodos.items():
+        x, y = ccrs.Robinson().transform_point(lon, lat, ccrs.PlateCarree())
+        pos_proj[n] = (x, y)
+    # Para ajustar la región del mapa donde hacemos foco
+    if enfocar:
+        lons = [pos[0] for pos in pos_nodos.values()]
+        lats = [pos[1] for pos in pos_nodos.values()]     
+        eje.set_extent([
+            min(lons) - margen_der,
+            max(lons) + margen_izq,
+            min(lats) - margen_inf,
+            max(lats) + margen_sup
+        ], crs=ccrs.PlateCarree())
+
+    # ETIQUETAS
+    for nodo in red.nodes():
+        nx.draw_networkx_labels(
+            red,
+            pos_proj,
+            labels={nodo: nodo},
+            font_color=color_etq_pais,
+            font_weight='bold',
+            alpha=alfa_etiquetas,
+            font_size=tam_tex_etq,
+            ax=eje,
+        )    
+
+    # ARISTAS
+    pesos_aristas = [float(red[u][v]['weight'])*1e1 for u,v in red.edges()]       
+    for i, (orig, des) in enumerate(red.edges()):
+        if orig == pais:
+            color_aris = color_emigracion
+        else:
+            color_aris = color_inmigracion
+        nx.draw_networkx_edges(
+            red,
+            pos_proj,
+            edgelist=[(orig, des)],
+            width=pesos_aristas[i],
+            edge_color=color_aris,
+            alpha=alfa_aristas,
+            connectionstyle='arc3,rad=0.25',            
+            arrowstyle='-',
+            arrows=True,
+            ax=eje,
+        )    
+    # REFERENCIAS
+    ref_pais_sin_dato = mpatches.Patch(
+        # color=to_rgba(color_nodos, alpha=.8),
+        label='Sin dato económico',
+        edgecolor=continentes,                    
+        facecolor='white',
+        alpha=1,
+        hatch='///////',
+    )
+    ref_emig = mpatches.Patch(
+        color=to_rgba(color_emigracion, alpha=alfa_aristas),
+        label='Emigrantes'
+    )
+    ref_inmig = mpatches.Patch(
+        color=to_rgba(color_inmigracion, alpha=alfa_aristas), 
+        label='Inmigrantes'
+    )
+    ref_min_mig = mpatches.Patch(
+        facecolor='none',
+        label=f'• Mín. migrantes:\n   {migra_min} [{paises_min_migra}]'
+    )        
+    ref_max_mig = mpatches.Patch(
+        facecolor='none',
+        label=f'• Máx. migrantes:\n   {migra_max} [{paises_max_migra}]'
+    )
+    ref_pct_mig = mpatches.Patch(
+        facecolor='none',
+        label=f'• Datos incluidos: {pct_datos-1}%'
+    )    
+    ref_nodos = mpatches.Patch(
+        facecolor='none',
+        label=f'• Nodos: {len(pos_nodos)}'
+    )    
+    ref_enlaces = mpatches.Patch(
+        facecolor='none',
+        label=f'• Enlaces: {len(pesos_aristas)}'
+    )
+    lista_ref = [
+        ref_pais_sin_dato,
+        ref_emig,
+        ref_inmig,
+        ref_min_mig,
+        ref_max_mig,
+        ref_pct_mig,
+        ref_nodos,
+        ref_enlaces,        
+    ]
+    if fondo_ref:
+        color_fondo = 'white'
+        color_borde = 'black'
+        alfa_ref = .5
+    else:        
+        color_fondo = 'none'
+        color_borde = 'none'
+        alfa_ref = 0
+        
+    ref = eje.legend(
+        title=f'{pais} {año}\nRed ego de primer orden',
+        handles=lista_ref,
+        handlelength=1,
+        handleheight=.7,
+        loc=ubic_ref,
+        fontsize=tam_tex_ref,
+        frameon=True,
+        facecolor=color_fondo,
+        framealpha=alfa_ref,
+        edgecolor=color_borde,
+        alignment='left',
+    )    
+    ref.get_title().set_fontweight('bold')
+    ref.get_title().set_fontsize(13)
+    ref.get_title().set_ha('left')
+    for text in ref.get_texts():
+        text.set_color(color_etq_pais)
+    eje.add_artist(ref)    
+    
+    fig.tight_layout()
+    plt.close()
+    
     return fig
