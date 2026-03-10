@@ -106,7 +106,7 @@ def graficar_top20(diccionario):
     plt.tight_layout()
 
     plt.savefig("resultados/top20_inmigracion_emigracion_alt.png", dpi=300, bbox_inches="tight")
-    print("Gráfico guardado como: resultados/top20_inmigracion_emigracion_alt2.png")
+    print("Gráfico guardado como: resultados/top20_inmigracion_emigracion_alt.png")
 
     plt.show()
 
