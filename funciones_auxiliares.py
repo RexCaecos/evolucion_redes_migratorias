@@ -21,6 +21,7 @@ from matplotlib.axes import Axes
 from matplotlib.collections import LineCollection
 from matplotlib.colors import Normalize
 from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.lines import Line2D
 from matplotlib.colors import to_rgba
 from matplotlib.figure import Figure
 from scipy.spatial import ConvexHull
@@ -1204,7 +1205,17 @@ def migracion_argentina(
 
 
 
+
+
+
+
+
+
+
+
+
 def red_ego_pais(
+    dicc_codigos: dict[str, str],
     pct_datos: int,
     dicc_migras_econ: dict[int, pd.Dataframe],
     pais: str,
@@ -1440,12 +1451,24 @@ def red_ego_pais(
         )    
 
     # ARISTAS
-    pesos_aristas = [float(red[u][v]['weight'])*1e1 for u,v in red.edges()]       
+    pesos_aristas = [float(red[u][v]['weight'])*1e1 for u,v in red.edges()]
+    direccion_econ = [red[u][v]['dif_puntaje'] for u,v in red.edges()]
+
     for i, (orig, des) in enumerate(red.edges()):
         if orig == pais:
             color_aris = color_emigracion
         else:
             color_aris = color_inmigracion
+        if not idh:
+            if direccion_econ[i] < 0:
+                estilo = (0, (5, 5))
+            else:
+                estilo = 'solid'
+        else:
+            if dicc_idh[dicc_codigos[des]] - dicc_idh[dicc_codigos[orig]] < 0:                
+                estilo = (0, (5, 5))
+            else:
+                estilo = 'solid'
         nx.draw_networkx_edges(
             red,
             pos_proj,
@@ -1453,7 +1476,8 @@ def red_ego_pais(
             width=pesos_aristas[i],
             edge_color=color_aris,
             alpha=alfa_aristas,
-            connectionstyle='arc3,rad=0.25',            
+            connectionstyle='arc3,rad=0.25',
+            style=estilo,
             arrowstyle='-',
             arrows=True,
             ax=eje,
@@ -1469,11 +1493,25 @@ def red_ego_pais(
     )
     ref_emig = mpatches.Patch(
         color=to_rgba(color_emigracion, alpha=alfa_aristas),
-        label='Emigrantes'
+        label='Emigración ↑Econ.'
+    )    
+    ref_emig_no_econ = Line2D(
+        [0], [0],
+        color=to_rgba(color_emigracion, alpha=alfa_aristas),
+        linestyle='--',
+        linewidth=2.5,
+        label='Emigración ↓Econ.'
     )
     ref_inmig = mpatches.Patch(
         color=to_rgba(color_inmigracion, alpha=alfa_aristas), 
-        label='Inmigrantes'
+        label='Inmigración ↑Econ.'
+    )    
+    ref_inmig_no_econ = Line2D(
+        [0], [0],
+        color=to_rgba(color_inmigracion, alpha=alfa_aristas),
+        linestyle='--',
+        linewidth=2.5,
+        label='Inmigración ↓Econ.'
     )
     ref_min_mig = mpatches.Patch(
         facecolor='none',
@@ -1498,7 +1536,9 @@ def red_ego_pais(
     lista_ref = [
         ref_pais_sin_dato,
         ref_emig,
+        ref_emig_no_econ,
         ref_inmig,
+        ref_inmig_no_econ,
         ref_min_mig,
         ref_max_mig,
         ref_pct_mig,
@@ -1517,7 +1557,7 @@ def red_ego_pais(
     ref = eje.legend(
         title=f'{pais} {año}\nRed ego de primer orden',
         handles=lista_ref,
-        handlelength=1,
+        handlelength=2,
         handleheight=.7,
         loc=ubic_ref,
         fontsize=tam_tex_ref,
