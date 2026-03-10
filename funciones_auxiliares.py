@@ -1405,7 +1405,8 @@ def red_ego_pais(
                 formula += f'{v}(1 - {c}) + '
             else:
                 formula += f'{v}{c} + '
-        tex_barra = f'Puntaje = {formula[:-2]}'
+        
+        tex_barra = f'Puntaje = {formula[:-2]} /  ∑ coef.'
     else:
         tex_barra = 'Índice de Desarrollo Humano'
     rango_barra = Normalize(vmin=0, vmax=1)
