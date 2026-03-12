@@ -1220,7 +1220,6 @@ def red_ego_pais(
     dicc_migras_econ: dict[int, pd.Dataframe],
     pais: str,
     año: int, 
-    puntajes: dict[str, float],
     df_idh: pd.DataFrame,
     idh: bool=False,
     **args
@@ -1398,15 +1397,8 @@ def red_ego_pais(
                 )    
 
     # Texto bajo la barra de color
-    if not idh:
-        formula = ''
-        for c,v in puntajes.items():
-            if c != 'PBI':
-                formula += f'{v}(1 - {c}) + '
-            else:
-                formula += f'{v}{c} + '
-        
-        tex_barra = f'Puntaje = {formula[:-2]} /  ∑ coef.'
+    if not idh:       
+        tex_barra = 'Puntaje económico'
     else:
         tex_barra = 'Índice de Desarrollo Humano'
     rango_barra = Normalize(vmin=0, vmax=1)
@@ -1579,3 +1571,86 @@ def red_ego_pais(
     plt.close()
     
     return fig
+
+
+
+def obtener_df_pais(
+    cod: str, df: pd.DataFrame, años: list[int], cols: list[str]
+) -> pd.DataFrame:
+    
+    df_res = df[(df.iso2_orig == cod) & df.año.isin(años)].copy()
+    df_res = (
+        df_res.sort_values(['año', 'migrantes'], ascending=[True, False])
+        .reset_index(drop=True)
+    )[cols]
+
+    return df_res
+
+
+def calcular_emigraciones(
+    origen: str, 
+    año: int, 
+    df: df.DataFrame,
+    dicc_vecinos: dict[str, set[str]],
+    umbral_emig: int
+) -> int:
+    
+    df = df[df.año == año].copy()
+    
+    # Total de emigrantes    
+    total_emig = df.migrantes.sum() 
+
+    # Población
+    pobla = int(df['poblacion_orig'].iloc[0])
+    
+    # Porcentaje de emigrantes (respecto a la población)
+    pct_pobla_emig = round(100 * total_emig / pobla, 1)
+        
+    # Distribución de la emigración: países que concentran el 90%
+    df['pct_aporte'] = 100 * df.migrantes / total_emig
+    df['pct_aporte_acum'] = df['pct_aporte'].cumsum()
+    
+    df_distri = df[df.pct_aporte_acum < umbral_emig]
+    lista_distri_emig = [
+        (des, f'{round(pct, 1)}%') 
+        for des, pct 
+        in zip(df_distri.iso2_des.values, df_distri.pct_aporte.values)
+    ]    
+    # Porcentaje de emigrantes en países limítrofes    
+    df['a_limitrofe'] = df.iso2_des.isin(dicc_vecinos[origen])
+    pct_en_limitrofe = round(100 * df[df.a_limitrofe].migrantes.sum() / total_emig, 1)
+
+    return pobla, total_emig, pct_pobla_emig, pct_en_limitrofe, lista_distri_emig
+
+
+
+def obtener_df_crisis(
+    pais: str,
+    df: pd.DataFrame,
+    años: list[int],
+    cols: list[str],
+    dicc_vecinos: dict[str, set[str]],
+    umbral_emig: int,
+) -> pd.DataFrame:
+    
+    df_pais = obtener_df_pais(pais, df, años, cols)
+
+    df_res = pd.DataFrame()
+    for año in años:
+        pobla, tot_emig, pct_emig, pct_limit, distri_emig = (
+            calcular_emigraciones(pais, año, df_pais, dicc_vecinos, umbral_emig)
+        )
+        fila = pd.DataFrame(
+            {
+                'pais': [pais],
+                'año': [año],
+                'poblacion': [pobla],
+                'emigrantes': [tot_emig],
+                'pct_pobla_emigrante': [pct_emig],
+                'pct_emig_limitrofe': [pct_limit],
+                f'distri_emig_{umbral_emig-1}%': [distri_emig]
+            }
+        )
+        df_res = pd.concat([df_res, fila])
+
+    return df_res.reset_index(drop=True)
