@@ -1364,8 +1364,12 @@ def red_ego_pais(
     for datos_pais in lector.records():
         iso3 = datos_pais.attributes['ISO_A3']
         nombre = datos_pais.attributes['NAME']  
+
         if nombre == 'France': # Ir agregando si descubrimos más que dan problemas
             iso3 = 'FRA'
+        elif nombre == 'Norway':
+            iso3 = 'NOR'
+            
         if iso3 in dicc_paises_involucrados.keys():
             poligono_pais = datos_pais.geometry
 
