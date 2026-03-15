@@ -191,11 +191,7 @@ try: # Los primeros dos df se construyen a la par porque se filtran entre sí
     # Los agregamos después de sumarlos a la tabla para que no haya repetidos
     codigos_m49.add(np.int64(158))
     codigos_m49.add(np.int64(2003))
-    try:
-        check =open('fuentes_de_datos/m49.csv', 'r')
-        check.close()
-    except FileNotFoundError:
-        df_m49.to_csv('fuentes_de_datos/m49.csv', index=False)
+    df_m49.to_csv('fuentes_de_datos/m49.csv', index=False)
 
 
     # df auxiliar para agregrar códigos en las tablas
@@ -213,11 +209,7 @@ try: # Los primeros dos df se construyen a la par porque se filtran entre sí
         .sort_values('iso3_coord', ascending=True)
         .reset_index(drop=True)
     )
-    try:
-        check =open('fuentes_de_datos/coordenadas.csv', 'r')
-        check.close()
-    except FileNotFoundError:
-        df_coordenadas.to_csv('fuentes_de_datos/coordenadas.csv', index=False)
+    df_coordenadas.to_csv('fuentes_de_datos/coordenadas.csv', index=False)
 
     print('Operación finalizada.')
 
@@ -300,11 +292,7 @@ try:
         .sort_values(['iso3_pobla','año_pobla'], ascending=[True, True])
         .reset_index(drop=True)
     )
-    try:
-        check =open('fuentes_de_datos/poblaciones.csv', 'r')
-        check.close()
-    except FileNotFoundError:
-        df_poblaciones.to_csv('fuentes_de_datos/poblaciones.csv', index=False)
+    df_poblaciones.to_csv('fuentes_de_datos/poblaciones.csv', index=False)
 
     print('Operación finalizada.')
 
@@ -440,16 +428,8 @@ try:
     )
 
     # Exportamos las tablas
-    try:
-        check =open('fuentes_de_datos/migraciones.csv', 'r')
-        check.close()
-    except FileNotFoundError:
-        df_migraciones.to_csv('fuentes_de_datos/migraciones.csv', index=False)
-    try:
-        check =open('fuentes_de_datos/migraciones_original.csv', 'r')
-        check.close()
-    except FileNotFoundError:
-        df_migras_original.to_csv('fuentes_de_datos/migraciones_original.csv', index=False)
+    df_migraciones.to_csv('fuentes_de_datos/migraciones.csv', index=False)
+    df_migras_original.to_csv('fuentes_de_datos/migraciones_original.csv', index=False)
     print('Operación finalizada.')
 
 except requests.exceptions.RequestException:    
@@ -618,11 +598,7 @@ try:
     )
 
     # Exportamos las tablas
-    try:
-        check =open('fuentes_de_datos/economicas.csv', 'r')
-        check.close()
-    except FileNotFoundError:
-        df_economicas.to_csv('fuentes_de_datos/economicas.csv', index=False)
+    df_economicas.to_csv('fuentes_de_datos/economicas.csv', index=False)
     print('Operación finalizada.')    
 
 
@@ -770,11 +746,7 @@ df_migras_90_24 = (
     .reset_index(drop=True)
 )
 df_migras_90_24 = df_migras_90_24.fillna(0)
-try:
-    check =open('fuentes_de_datos/migras_90_24.csv', 'r')
-    check.close()
-except FileNotFoundError:
-    df_migras_90_24.to_csv('fuentes_de_datos/migras_90_24.csv', index=False)
+df_migras_90_24.to_csv('fuentes_de_datos/migras_90_24.csv', index=False)
 
 print('Operación finalizada.')
 tex_m49 = '\n• df_m49: códigos y clasificaciones de países, e indicadores estructurales.'
