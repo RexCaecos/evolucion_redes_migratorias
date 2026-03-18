@@ -817,8 +817,12 @@ def graficar_migraciones_africa(
 
 # Función para convertir valores
 def convertir_valor(valor: int, redondeo:int = 2) -> str:
+    cambiar_signo = False
+    if valor < 0:
+        valor *= -1
+        cambiar_signo = True
     if valor < 1e3:
-        return f'{valor}'
+        return f'{valor}' if not cambiar_signo else f'{-1*valor}' 
     elif valor < 1e6:
         prefijo = 'k'
         denominador = 1e3
@@ -829,9 +833,17 @@ def convertir_valor(valor: int, redondeo:int = 2) -> str:
     valor_redondeado = round(conversion, redondeo)
     # si el decimal es 0 lo descarto
     if valor_redondeado.is_integer():
-        return f'{int(valor_redondeado)}{prefijo}'
+        return (
+            f'{int(valor_redondeado)}{prefijo}' 
+            if not cambiar_signo 
+            else f'{int(-1*valor_redondeado)}{prefijo}'
+        ) 
     else:
-        return f'{valor_redondeado}{prefijo}'
+        return (
+            f'{valor_redondeado}{prefijo}' 
+            if not cambiar_signo 
+            else f'{-1*valor_redondeado}{prefijo}'
+        )
     
 
 
@@ -1444,11 +1456,6 @@ def migracion_argentina(
 
 
 
-
-
-
-
-
 def red_ego_pais(
     dicc_codigos: dict[str, str],
     pct_datos: int,
@@ -1472,10 +1479,10 @@ def red_ego_pais(
     # Valores para normalizar grosor aristas y tamaño nodos
     migra_max = df.migrantes.max()       
     max_orig, max_des = df.loc[df['migrantes'].idxmax(), ['iso2_orig', 'iso2_des']]
-    paises_max_migra = f'{max_orig} --> {max_des}'
+    paises_max_migra = f'{max_orig} → {max_des}'
     migra_min = df.migrantes.min()    
     min_orig, min_des = df.loc[df['migrantes'].idxmin(), ['iso2_orig', 'iso2_des']]
-    paises_min_migra = f'{min_orig} --> {min_des}'
+    paises_min_migra = f'{min_orig} → {min_des}'
 
     # Creo un dicc con los valores del idh de cada país involucrado
     if idh:
@@ -1810,6 +1817,282 @@ def red_ego_pais(
     plt.close()
     
     return fig
+
+
+
+
+
+def red_ego_pais2(
+    dicc_codigos: dict[str, str],
+    pct_datos: int,
+    dicc_migras_econ: dict[int, pd.Dataframe],
+    pais: str,
+    año: int, 
+    **args
+) -> Figure:
+    
+    # Obtenemos los datos del país
+    df = dicc_migras_econ[año].copy()
+    df = df.query('iso2_orig == @pais | iso2_des == @pais')
+    
+    # Países involucrados (para colorear el mapa)
+    paises_involucrados = set(df.iso3_orig.values) | set(df.iso3_des.values)
+
+    # Balance migratorio (entrada - salida)
+    tot_emig = df.query('iso2_orig == @pais').migrantes.sum()
+    tot_inmig = df.query('iso2_des == @pais').migrantes.sum()
+    balance_mig = tot_inmig - tot_emig
+    
+    # Valores para normalizar grosor aristas y tamaño nodos
+    migra_max = df.migrantes.max()       
+    max_orig, max_des = df.loc[df['migrantes'].idxmax(), ['iso2_orig', 'iso2_des']]
+    paises_max_migra = f'{max_orig} → {max_des}'
+    migra_min = df.migrantes.min()    
+    min_orig, min_des = df.loc[df['migrantes'].idxmin(), ['iso2_orig', 'iso2_des']]
+    paises_min_migra = f'{min_orig} → {min_des}'
+
+    # Construimos la red de migraciones
+    red = nx.DiGraph()    
+    for _, fila in df.iterrows():
+        
+        # Países        
+        origen = fila.iso2_orig
+        destino = fila.iso2_des
+        
+        # Ubicaciones
+        x_orig, y_orig = fila.lon_orig, fila.lat_orig
+        x_des, y_des = fila.lon_des, fila.lat_des
+        
+        # Migrantes ( normalización grosor aristas)
+        migrantes = fila.migrantes / migra_max    
+               
+        # Agregamos nodos y enlace a la red
+        red.add_node(
+            origen, 
+            pos=(x_orig, y_orig),
+        )
+        red.add_node(
+            destino,
+            pos=(x_des, y_des),
+        )
+        red.add_edge(
+            origen,
+            destino,
+            weight=migrantes,
+        )
+
+    # CONFIGURACIÓN GRAL. DE LA VISUALIZACIÓN
+    dpi = args.get('dpi', 300)
+    tam_figura = args.get('tam_figura', (20,10))  
+    # Colores del mapa
+    agua = args.get('agua','#e6e6e6')
+    tierra = args.get('tierra', '#b0b0b0')
+    fronteras = args.get('fronteras', '#dfdfdf')
+    continentes = args.get('continentes', '#8a8a8a')   
+    # Colores de la red
+    color_paises = args.get('color_paises', '#486155')
+    color_borde_pais = args.get('color_borde_pais', '#27352f')
+    color_emigracion = args.get('color_emigracion', '#ff0000')
+    color_inmigracion = args.get('color_inmigracion', '#00ff73')
+    color_etq_pais = args.get('color_etq_pais', '#101010')
+    alfa_paises = args.get('alfa_paises', .6)
+    alfa_aristas = args.get('alfa_aristas', .8)
+    alfa_etiquetas = args.get('alfa_etiquetas', .8)
+    # Tamaños textos
+    tam_tex_etq = args.get('tam_tex_etq', 13) # Códigos de países
+    tam_tex_ref = args.get('tam_tex_ref', 12) # Referencias
+    # Márgenes que permiten regular el zoom sobre el mapa
+    enfocar = args.get('enfocar', False)
+    margen_izq = args.get('margen_izq', 0)
+    margen_sup = args.get('margen_sup', 0)    
+    margen_der = args.get('margen_der', 0)
+    margen_inf = args.get('margen_inf', 0)
+    # Ubicación y fondo de las referencias
+    ubic_ref = args.get('ubic_ref', 'lower left')
+    fondo_ref = args.get('fondo_ref', False)
+    # Otros
+    grosor_bordes_paises = args.get('grosor_bordes_paises', .6)
+    grosor_bordes_continentes = args.get('grosor_bordes_continentes', .7)
+        
+    fig, eje = plt.subplots(
+        figsize=tam_figura, 
+        dpi=dpi,
+        subplot_kw={'projection': ccrs.Robinson()}
+    )    
+    fig.set_facecolor('white')
+    eje.set_facecolor(agua) 
+    eje.add_feature(cfeature.LAND, facecolor=tierra)
+    eje.add_feature(cfeature.OCEAN, facecolor=agua)
+    eje.add_feature(
+        cfeature.COASTLINE,
+        edgecolor=continentes,
+        linewidth=grosor_bordes_continentes,
+        zorder=1
+    )
+    eje.add_feature(
+        cfeature.BORDERS,
+        edgecolor=fronteras,
+        linewidth=grosor_bordes_paises,
+        zorder=1
+    )
+    
+  
+
+    forma_paises = shpreader.natural_earth(
+        resolution='110m',
+        category='cultural',
+        name='admin_0_countries'
+    )
+    lector = shpreader.Reader(forma_paises)
+
+    for datos_pais in lector.records():
+        iso3 = datos_pais.attributes['ISO_A3']
+        nombre = datos_pais.attributes['NAME']  
+
+        if nombre == 'France': # Ir agregando si descubrimos más que dan problemas
+            iso3 = 'FRA'
+        elif nombre == 'Norway':
+            iso3 = 'NOR'
+            
+        if iso3 in paises_involucrados:
+            poligono_pais = datos_pais.geometry
+            eje.add_geometries(
+                [poligono_pais],
+                crs=ccrs.PlateCarree(),
+                edgecolor=color_borde_pais,
+                linewidth=grosor_bordes_paises,
+                facecolor=color_paises,
+                alpha=alfa_paises,
+                zorder=1,
+            )
+
+
+    # RED 
+    pos_nodos = nx.get_node_attributes(red, 'pos')
+    pos_proj = {}
+    for n, (lon, lat) in pos_nodos.items():
+        x, y = ccrs.Robinson().transform_point(lon, lat, ccrs.PlateCarree())
+        pos_proj[n] = (x, y)
+    # Para ajustar la región del mapa donde hacemos foco
+    if enfocar:
+        lons = [pos[0] for pos in pos_nodos.values()]
+        lats = [pos[1] for pos in pos_nodos.values()]     
+        eje.set_extent([
+            min(lons) - margen_der,
+            max(lons) + margen_izq,
+            min(lats) - margen_inf,
+            max(lats) + margen_sup
+        ], crs=ccrs.PlateCarree())
+
+    # ETIQUETAS
+    for nodo in red.nodes():
+        nx.draw_networkx_labels(
+            red,
+            pos_proj,
+            labels={nodo: nodo},
+            font_color=color_etq_pais,
+            font_weight='bold',
+            alpha=alfa_etiquetas,
+            font_size=tam_tex_etq,
+            ax=eje,
+        )    
+
+    # ARISTAS
+    pesos_aristas = [float(red[u][v]['weight'])*1e1 for u,v in red.edges()]
+    for i, (orig, des) in enumerate(red.edges()):
+        if orig == pais:
+            color_aris = color_emigracion
+        else:
+            color_aris = color_inmigracion
+        nx.draw_networkx_edges(
+            red,
+            pos_proj,
+            edgelist=[(orig, des)],
+            width=pesos_aristas[i],
+            edge_color=color_aris,
+            alpha=alfa_aristas,
+            connectionstyle='arc3,rad=0.25',
+            style='solid',
+            arrowstyle='->',
+            arrowsize=max(10,pesos_aristas[i]*5),
+            arrows=True,
+            ax=eje,
+        )    
+        
+    # REFERENCIAS
+    ref_emig = mpatches.Patch(
+        color=to_rgba(color_emigracion, alpha=alfa_aristas),
+        label='Emigración'
+    )    
+    ref_inmig = mpatches.Patch(
+        color=to_rgba(color_inmigracion, alpha=alfa_aristas), 
+        label='Inmigración'
+    )    
+    
+    ref_balance = mpatches.Patch(
+        facecolor='none',
+        label=f'• Balance migratorio: {convertir_valor(balance_mig, 1)}'
+    )              
+    ref_max_mig = mpatches.Patch(
+        facecolor='none',
+        label=f'• Máx. migrantes: {paises_max_migra} {convertir_valor(migra_max, 1)} '
+    )
+    
+    lista_ref = [
+        ref_emig,
+        ref_inmig,
+        ref_balance,
+        ref_max_mig,
+    ]
+    if fondo_ref:
+        color_fondo = 'white'
+        color_borde = 'black'
+        alfa_ref = .5
+    else:        
+        color_fondo = 'none'
+        color_borde = 'none'
+        alfa_ref = 0
+        
+    ref = eje.legend(
+        title=f'{pais} {año}',
+        handles=lista_ref,
+        handlelength=2,
+        handleheight=.7,
+        loc=ubic_ref,
+        fontsize=tam_tex_ref,
+        frameon=True,
+        facecolor=color_fondo,
+        framealpha=alfa_ref,
+        edgecolor=color_borde,
+        alignment='left',
+    )    
+    ref.get_title().set_fontweight('bold')
+    ref.get_title().set_fontsize(13)
+    for text in ref.get_texts():
+        text.set_color(color_etq_pais)
+    eje.add_artist(ref)    
+    
+    fig.tight_layout()    
+    plt.savefig(f'resultados/red_{pais}_{año}.png', bbox_inches='tight', dpi=300) 
+    
+    plt.close()
+    
+    return fig
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
