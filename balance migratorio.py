@@ -9,8 +9,8 @@ import cartopy.io.shapereader as shpreader
 # 1) Leer CSV
 # ===============================
 
-df = pd.read_csv("fuentes-de-datos/migras_90_24.csv")
-año = 2024
+df = pd.read_csv("fuentes_de_datos/migras_90_24.csv")
+año = 1990
 otro = 2024 if año == 1990 else 1990
 
 # Asegurar tipos correctos
@@ -139,10 +139,10 @@ for country in reader.records():
 sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
 sm.set_array([])
 
-cbar = plt.colorbar(sm, ax=ax, orientation='vertical', fraction=0.03, pad=0.02)
+cbar = plt.colorbar(sm, ax=ax, orientation='vertical', fraction=0.05, pad=0.02,shrink=0.8)
 #cbar.set_label("Migrantes (1990)", fontsize=12)
 
-#plt.title("Migrantes por país de origen (1990)", fontsize=18)
+# plt.title("Migrantes por país de origen (1990)", fontsize=18)
 plt.savefig(
     f"resultados/balance_migratorio_{año}.png",
     dpi=300,                 # calidad alta para impresión
@@ -151,4 +151,4 @@ plt.savefig(
     facecolor=fig.get_facecolor()
 )
 print(f"Mapa guardado como: resultados/balance_migratorio_{año}.png")
-#plt.show()
+plt.show()

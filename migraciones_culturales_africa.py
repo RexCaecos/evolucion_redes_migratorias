@@ -38,14 +38,14 @@ c = otra_colonia
 d = a_soberano
 
 
-fig = plt.figure(figsize=(5,7))
-plt.barh(años, d, label="al ex pais soberano", left=c+b+a , color="green")
-plt.barh(años, c, label="a ex colonias de la misma potencia", left=b+a , color="orange")
-plt.barh(años, b, label="a paises con un idioma en comun", left=a, color="blue")
-plt.barh(años, a, label="otros destinos", color="red")
-plt.xlabel("Número de Migrantes",fontsize=10)
-plt.ylabel("Año", fontsize=10)
-plt.legend(fontsize=7)
+fig = plt.figure(figsize=(15,5))
+plt.bar(años, d, label="al ex pais soberano", bottom=c+b+a , color="#622666")
+plt.bar(años, c, label="a ex colonias de la misma potencia", bottom=b+a , color="#d2204c")
+plt.bar(años, b, label="a paises con un idioma en comun", bottom=a, color="#f26c4a")
+plt.bar(años, a, label="otros destinos", color="grey")
+plt.xlabel("Año")
+plt.ylabel("Número de Migrantes")
+plt.legend()
 
 plt.savefig(
     f"resultados/Migraciones culturales en africah.png",
@@ -88,28 +88,28 @@ ORIGENES = ["MAR","DZA","TUN","NGA","ZAF","AGO","SEN","COM","MDG"]
 # print(df_porcentajes[["migrantes", "porcentaje"]].head(10))
 
 
-df_porcentajes = df_metropolis_2024
+# df_porcentajes = df_metropolis_2024
 
-df_porcentajes["porcentaje"] = df_porcentajes["migrantes"].div(
-    df.groupby("iso3_orig")["migrantes"].transform("sum")
-).mul(100)
+# df_porcentajes["porcentaje"] = df_porcentajes["migrantes"].div(
+#     df.groupby("iso3_orig")["migrantes"].transform("sum")
+# ).mul(100)
 
-# print(df_porcentajes[["migrantes", "porcentaje"]].head(10))
+# # print(df_porcentajes[["migrantes", "porcentaje"]].head(10))
 
-df_porcentajes = df_porcentajes[df_porcentajes["iso3_des"] == df_porcentajes["codigo_colonia_de_origen"]]
+# df_porcentajes = df_porcentajes[df_porcentajes["iso3_des"] == df_porcentajes["codigo_colonia_de_origen"]]
 
 # print(df_porcentajes[["iso3_orig","iso3_des", "porcentaje"]].sort_values("porcentaje", ascending=False).head(20))
 
-año = 2020
-imprimible = migraciones[#(df_metropolis["año"] == año) &
-                           (migraciones["iso2_des"]=="ZW")&#.isin(DESTINOS))&
-                           (migraciones["iso2_orig"]=="ZA")]#.isin(ORIGENES))&
-                        #    (df_metropolis["migrantes"]<151000)]
-print(imprimible[["iso3_orig", "iso3_des", "migrantes","año"]].sort_values("migrantes", ascending=False).head(10))
+# año = 2020
+# imprimible = migraciones[#(df_metropolis["año"] == año) &
+#                            (migraciones["iso2_des"]=="ZW")&#.isin(DESTINOS))&
+#                            (migraciones["iso2_orig"]=="ZA")]#.isin(ORIGENES))&
+#                         #    (df_metropolis["migrantes"]<151000)]
+# print(imprimible[["iso3_orig", "iso3_des", "migrantes","año"]].sort_values("migrantes", ascending=False).head(10))
 
 # print(df_metropolis.groupby("iso3_orig")["migrantes"].sum().sort_values(ascending=False).head(10))
 
-print("==============",año,"==============")
+# print("==============",año,"==============")
 
 # print(migraciones[migraciones["iso3_des"]== "PRT"].sort_values("migrantes", ascending=False)[["iso3_orig","iso3_des","año", "migrantes"]].head(10))
 # print(migraciones[(migraciones["iso3_orig"] == "MAR")&
