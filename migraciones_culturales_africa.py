@@ -49,7 +49,7 @@ plt.legend()
 
 plt.savefig(
     f"resultados/Migraciones culturales en africah.png",
-    dpi=300,                 # calidad alta para impresión
+    dpi=150,                 # calidad alta para impresión
     bbox_inches="tight",     # elimina márgenes blancos
     pad_inches=0.1,
     facecolor=fig.get_facecolor()

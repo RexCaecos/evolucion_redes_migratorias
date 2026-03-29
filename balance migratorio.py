@@ -139,16 +139,17 @@ for country in reader.records():
 sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
 sm.set_array([])
 
-cbar = plt.colorbar(sm, ax=ax, orientation='vertical', fraction=0.05, pad=0.02,shrink=0.8)
+cbar = plt.colorbar(sm, ax=ax, orientation='vertical')#, fraction=0.05, pad=0.02,shrink=0.8)
+cbar.ax.set_position([0.80, 0.23, 0.02, 0.52])
 #cbar.set_label("Migrantes (1990)", fontsize=12)
 
 # plt.title("Migrantes por país de origen (1990)", fontsize=18)
 plt.savefig(
     f"resultados/balance_migratorio_{año}.png",
-    dpi=300,                 # calidad alta para impresión
+    dpi=100,                 # calidad alta para impresión
     bbox_inches="tight",     # elimina márgenes blancos
     pad_inches=0.1,
     facecolor=fig.get_facecolor()
 )
 print(f"Mapa guardado como: resultados/balance_migratorio_{año}.png")
-plt.show()
+# plt.show()
