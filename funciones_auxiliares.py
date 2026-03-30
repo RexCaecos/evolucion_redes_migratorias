@@ -10,26 +10,22 @@ import matplotlib.pyplot as plt
 import networkx as nx 
 import numpy as np
 import pandas as pd
-import seaborn.objects as so
 import seaborn as sns
+import seaborn.objects as so
 import textwrap
+
+
 from pathlib import Path
-
-
 from collections import Counter
 from IPython.display import display
 from matplotlib.axes import Axes
-from matplotlib.collections import LineCollection
 from matplotlib.colors import Normalize
 from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.lines import Line2D
 from matplotlib.colors import to_rgba
+from matplotlib.colors import TwoSlopeNorm
 from matplotlib.figure import Figure
-from scipy.spatial import ConvexHull
-from sklearn.neighbors import KernelDensity
+from matplotlib.lines import Line2D
 from tqdm.notebook import tqdm
-
-
 
 
 
@@ -2287,4 +2283,104 @@ def graficar_limitrofes(tabla_vals,df_pct):
     
     plt.tight_layout()
     #plt.savefig("heatmap_migracion.png", dpi=130, bbox_inches='tight')
+    plt.show()
+
+
+
+def plot_balance_migratorio(año, df, otro=False):
+    """año = año para el que se quiere el balance migratorio
+    df = dataframe con datos de migración
+    otro = año para comparar (opcional)"""
+
+    # Tomamos todos los ISO3 que aparezcan como origen o destino
+    paises = set(df['iso3_orig'].dropna()) | set(df['iso3_des'].dropna())
+
+    # Eliminar código inválido
+    paises.discard("ZZZ")
+
+    balance_dict = {pais: 0 for pais in paises}
+    balance_dict_otro = {pais: 0 for pais in paises}
+    for _, row in df.iterrows():
+        if row['año'] == año: 
+            iso_orig = row['iso3_orig']
+            iso_dest = row['iso3_des']
+            migrantes = row['migrantes']
+            if pd.isna(migrantes):
+                continue
+            if iso_orig != "ZZZ" and iso_orig in balance_dict:
+                balance_dict[iso_orig] -= migrantes
+            if iso_dest != "ZZZ" and iso_dest in balance_dict:
+                balance_dict[iso_dest] += migrantes
+        elif otro is not False and row['año'] == otro:
+            iso_orig = row['iso3_orig']
+            iso_dest = row['iso3_des']
+            migrantes = row['migrantes']
+            if pd.isna(migrantes):
+                continue
+            if iso_orig != "ZZZ" and iso_orig in balance_dict:
+                balance_dict_otro[iso_orig] -= migrantes
+            if iso_dest != "ZZZ" and iso_dest in balance_dict:
+                balance_dict_otro[iso_dest] += migrantes
+    if otro is False:
+        balance_dict_otro = balance_dict
+
+    #Preparar mapa
+    fig = plt.figure(figsize=(20,12))
+    ax = plt.axes(projection=ccrs.Robinson())
+    ax.set_global()
+    ax.set_facecolor("#f0f0f0")
+    ax.coastlines(linewidth=0.5)
+    ax.add_feature(cfeature.BORDERS, linestyle=':', linewidth=0.4)
+    cmap = plt.cm.RdYlGn
+
+    # Normalización para compara entre dos fechas
+    vmin = min(min(balance_dict.values()), min(balance_dict_otro.values()))
+    vmax = max(max(balance_dict.values()), max(balance_dict_otro.values()))
+    norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
+    cmap = plt.cm.RdYlGn
+
+    #Leer shapefile Natural Earth
+    shapefile = shpreader.natural_earth(
+        resolution='110m',
+        category='cultural',
+        name='admin_0_countries'
+    )
+
+    #Dibujar países
+    reader = shpreader.Reader(shapefile)
+    for country in reader.records():
+        iso3 = country.attributes['ISO_A3']
+        geom = country.geometry
+        if iso3 == "-99":
+            continue
+        value = balance_dict.get(iso3)
+        if value is not None:
+            facecolor = cmap(norm(value))
+        else:
+            facecolor = "#d3d3d3" 
+        ax.add_geometries(
+            [geom],
+            ccrs.PlateCarree(),
+            facecolor=facecolor,
+            edgecolor="black",
+            linewidth=0.2
+        )
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+
+    cbar = plt.colorbar(sm, ax=ax, orientation='vertical', fraction=0.05, pad=0.02,shrink=0.8)
+    cbar.ax.tick_params(labelsize=14)
+    cbar.ax.yaxis.get_offset_text().set_fontsize(16)
+    # cbar.ax.set_position([0.80, 0.23, 0.02, 0.52])
+    #cbar.set_label("Migrantes (1990)", fontsize=12)
+
+    plt.title("Migrantes por país de origen (1990)", fontsize=18)
+    plt.savefig(
+        f"resultados/balance_migratorio_{año}.png",
+        dpi=100,                 # calidad alta para impresión
+        bbox_inches="tight",     # elimina márgenes blancos
+        pad_inches=0.1,
+        facecolor=fig.get_facecolor()
+    )
+    print(f"Mapa guardado como: resultados/balance_migratorio_{año}.png")
     plt.show()
