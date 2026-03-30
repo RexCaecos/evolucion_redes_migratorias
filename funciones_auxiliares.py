@@ -11,6 +11,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import seaborn.objects as so
+import seaborn as sns
 import textwrap
 from pathlib import Path
 
@@ -1459,7 +1460,7 @@ def migracion_argentina(
 def red_ego_pais(
     dicc_codigos: dict[str, str],
     pct_datos: int,
-    dicc_migras_econ: dict[int, pd.Dataframe],
+    dicc_migras_econ: dict[int, pd.DataFrame],
     pais: str,
     año: int, 
     df_idh: pd.DataFrame,
@@ -1825,7 +1826,7 @@ def red_ego_pais(
 def red_ego_pais2(
     dicc_codigos: dict[str, str],
     pct_datos: int,
-    dicc_migras_econ: dict[int, pd.Dataframe],
+    dicc_migras_econ: dict[int, pd.DataFrame],
     pais: str,
     año: int, 
     **args
@@ -2112,7 +2113,7 @@ def obtener_df_pais(
 def calcular_emigraciones(
     origen: str, 
     año: int, 
-    df: df.DataFrame,
+    df: pd.DataFrame,
     dicc_vecinos: dict[str, set[str]],
     umbral_emig: int
 ) -> int:
@@ -2178,3 +2179,112 @@ def obtener_df_crisis(
     return df_res.reset_index(drop=True)
 
 
+
+
+
+
+
+def preparar_gephi(df, año):
+    df_year = df[df["año"] == año].copy()
+    
+    # Definimos las aristas
+    aristas = (
+        df_year.groupby(["iso3_orig", "iso3_des"], as_index=False).agg({"migrantes": "sum"})
+        .rename(columns={
+            "iso3_orig": "Source",
+            "iso3_des": "Target",
+            "migrantes": "Weight"
+        })
+    )
+    
+    # Definimos los nodos
+    nodos_orig = df_year[["iso3_orig", "origen_ES", "poblacion_orig"]]\
+        .rename(columns={
+            "iso3_orig": "Id",
+            "origen_ES": "Label",
+            "poblacion_orig": "Population"
+        })
+    nodos_des = df_year[["iso3_des", "destino_ES", "poblacion_des"]]\
+        .rename(columns={
+            "iso3_des": "Id",
+            "destino_ES": "Label",
+            "poblacion_des": "Population"
+        })
+
+    nodos = (
+        pd.concat([nodos_orig, nodos_des])
+        .drop_duplicates(subset="Id")
+    )
+    
+    return nodos, aristas
+
+
+
+
+
+def format_combined(val, pct):
+    if pd.isna(val) or pd.isna(pct) or val == 0:
+        return ""
+    
+    if val >= 1_000_000:
+        val_str = f"{val/1_000_000:.1f}M"
+    elif val >= 1_000:
+        val_str = f"{val/1_000:.1f}k"
+    else:
+        val_str = f"{int(val)}"
+    
+    return f"{pct:.1f}%\n{val_str}"
+
+def graficar_limitrofes(tabla_vals,df_pct):
+
+    annot_labels = pd.DataFrame(index=tabla_vals.index, columns=tabla_vals.columns)
+    
+    for i in tabla_vals.index:
+        for j in tabla_vals.columns:
+            annot_labels.loc[i, j] = format_combined(
+                tabla_vals.loc[i, j],
+                df_pct.loc[i, j]
+            )
+    
+    sns.set_context("paper", font_scale=1.4)
+    fig, ax = plt.subplots(figsize=(17, 5), dpi=120)  
+    
+    sns.heatmap(
+        df_pct,
+        annot=annot_labels,
+        fmt="",
+        cmap="rocket_r",
+        linewidths=0,
+        cbar_kws={'label': "Porcentaje de migración limítrofe",'shrink': 0.4,'pad': 0.05},
+        annot_kws={"size": 13.4, "alpha": 0.95},
+        ax=ax
+    )
+    
+    for i in range(df_pct.shape[0] + 1):
+        ax.axhline(i, color='white', lw=7, alpha=0.9)
+    
+    for j in range(df_pct.shape[1] + 1):
+        ax.axvline(j, color='white', lw=0.2, alpha=0.3)
+    
+    ax.set_xticks(np.arange(len(df_pct.columns)) + 0.5)
+    ax.set_xticklabels(df_pct.columns, rotation=0, fontsize=9)
+    ax.set_yticklabels(df_pct.index, rotation=0, fontsize=10)
+    
+    ax.tick_params(axis='x', bottom=True, length=4, width=0.8, color='gray')
+    ax.tick_params(axis='y', left=True, length=4, width=0.8, color='black')
+    
+    ax.set_xlabel(None)
+    ax.set_ylabel(None)
+    
+    from matplotlib.patches import Rectangle
+    for i in range(df_pct.shape[0]):
+        rect = Rectangle((0, i),df_pct.shape[1],7,fill=False,edgecolor='lightgray',linewidth=7)
+        ax.add_patch(rect)
+    
+    
+    ax.tick_params(axis='x', labelsize=14)
+    ax.tick_params(axis='y', labelsize=14)
+    
+    plt.tight_layout()
+    #plt.savefig("heatmap_migracion.png", dpi=130, bbox_inches='tight')
+    plt.show()
