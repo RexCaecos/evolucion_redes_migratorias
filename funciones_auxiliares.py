@@ -2324,6 +2324,16 @@ def plot_balance_migratorio(año, df, otro=False):
     if otro is False:
         balance_dict_otro = balance_dict
 
+    # Colores para barra
+    colores = [
+        (0.0, "#4d0b0b"),   # rojo oscuro (negativos)
+        (0.45, "#ec5959"),  # transición
+        (0.5, "#ecec9b"),   # 0
+        (0.55, "#7ccead"),  # transición
+        (1.0, "#104632")    # verde oscuro (positivos)
+    ]
+    cmap_alto_contraste = LinearSegmentedColormap.from_list("custom", colores)
+
     #Preparar mapa
     fig = plt.figure(figsize=(20,12))
     ax = plt.axes(projection=ccrs.Robinson())
@@ -2331,13 +2341,15 @@ def plot_balance_migratorio(año, df, otro=False):
     ax.set_facecolor("#f0f0f0")
     ax.coastlines(linewidth=0.5)
     ax.add_feature(cfeature.BORDERS, linestyle=':', linewidth=0.4)
-    cmap = plt.cm.RdYlGn
+    # cmap = plt.cm.RdYlGn
 
     # Normalización para compara entre dos fechas
     vmin = min(min(balance_dict.values()), min(balance_dict_otro.values()))
     vmax = max(max(balance_dict.values()), max(balance_dict_otro.values()))
-    norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
-    cmap = plt.cm.RdYlGn
+    abs_max = max(abs(vmin), abs(vmax))
+    norm = TwoSlopeNorm(vmin=-abs_max, vcenter=0, vmax=abs_max)
+    # norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
+    # cmap = plt.cm.RdYlGn
 
     #Leer shapefile Natural Earth
     shapefile = shpreader.natural_earth(
@@ -2350,12 +2362,21 @@ def plot_balance_migratorio(año, df, otro=False):
     reader = shpreader.Reader(shapefile)
     for country in reader.records():
         iso3 = country.attributes['ISO_A3']
+        nombre = country.attributes['NAME']
+
+        if nombre == 'France': # Ir agregando si descubrimos más que dan problemas
+            iso3 = 'FRA'
+        elif nombre == 'Norway':
+            iso3 = 'NOR'
+        elif nombre == 'Greenland':
+            iso3 = 'DNK'
+            
         geom = country.geometry
         if iso3 == "-99":
             continue
         value = balance_dict.get(iso3)
         if value is not None:
-            facecolor = cmap(norm(value))
+            facecolor = cmap_alto_contraste(norm(value))
         else:
             facecolor = "#d3d3d3" 
         ax.add_geometries(
@@ -2365,16 +2386,16 @@ def plot_balance_migratorio(año, df, otro=False):
             edgecolor="black",
             linewidth=0.2
         )
-    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm = plt.cm.ScalarMappable(cmap=cmap_alto_contraste, norm=norm)
     sm.set_array([])
 
     cbar = plt.colorbar(sm, ax=ax, orientation='vertical', fraction=0.05, pad=0.02,shrink=0.8)
-    cbar.ax.tick_params(labelsize=14)
-    cbar.ax.yaxis.get_offset_text().set_fontsize(16)
+    cbar.ax.tick_params(labelsize=38)
+    cbar.ax.yaxis.get_offset_text().set_fontsize(40)
     # cbar.ax.set_position([0.80, 0.23, 0.02, 0.52])
     #cbar.set_label("Migrantes (1990)", fontsize=12)
 
-    plt.title("Migrantes por país de origen (1990)", fontsize=18)
+    plt.title(f"Migrantes por país de origen ({año})", fontsize=18)
     plt.savefig(
         f"resultados/balance_migratorio_{año}.png",
         dpi=100,                 # calidad alta para impresión
