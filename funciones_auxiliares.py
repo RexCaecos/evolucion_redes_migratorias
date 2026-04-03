@@ -13,6 +13,8 @@ import pandas as pd
 import seaborn as sns
 import seaborn.objects as so
 import textwrap
+import infomap
+
 
 
 from pathlib import Path
@@ -26,7 +28,7 @@ from matplotlib.colors import TwoSlopeNorm
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from tqdm.notebook import tqdm
-
+from networkx.algorithms.community.quality import modularity
 
 
 
@@ -763,6 +765,68 @@ def graficar_red_corredores(
 
 
 
+def calcular_cuadro_global(df: pd.DataFrame, año: int) -> dict:
+
+    # --- FILTRO ---
+    d = df[(df['año'] == año) & (df['iso3_orig'] != 'ZZZ')].copy()
+
+    # --- GRAFO DIRIGIDO PONDERADO ---
+    G = nx.DiGraph()
+    for _, r in d.iterrows():
+        u, v, w = r['iso3_orig'], r['iso3_des'], r['migrantes']
+        if w > 0:
+            if G.has_edge(u, v):
+                G[u][v]['weight'] += w
+            else:
+                G.add_edge(u, v, weight=w)
+
+    # --- BÁSICOS ---
+    nodos = G.number_of_nodes()
+    aristas = G.number_of_edges()
+    densidad = nx.density(G)
+    reciprocidad = nx.reciprocity(G)
+
+    # --- CLUSTERING BINARIO (como en tu cuadro) ---
+    G_undir = G.to_undirected()
+    clustering_binario = nx.average_clustering(G_undir)
+
+    # --- LONGITUD DE CAMINO (SCC) ---
+    scc = max(nx.strongly_connected_components(G), key=len)
+    G_scc = G.subgraph(scc).copy()
+
+    if G_scc.number_of_nodes() > 1:
+        long_camino = nx.average_shortest_path_length(G_scc)
+    else:
+        long_camino = float('nan')
+
+    # --- INFOMAP ---
+    nodos_lista = list(G.nodes())
+    nodo_a_id = {n: i for i, n in enumerate(nodos_lista)}
+
+    im = infomap.Infomap("--directed --silent")
+    for u, v, data in G.edges(data=True):
+        im.add_link(nodo_a_id[u], nodo_a_id[v], data['weight'])
+    im.run()
+
+    # comunidades
+    comunidades_dict = {}
+    for node in im.nodes:
+        cid = node.module_id
+        comunidades_dict.setdefault(cid, set()).add(nodos_lista[node.node_id])
+    comunidades = list(comunidades_dict.values())
+
+    # --- MODULARIDAD ---
+    mod = modularity(G_undir, comunidades, weight='weight')
+
+    return {
+        'Nodos': nodos,
+        'Aristas': aristas,
+        'Densidad': round(densidad, 4),
+        'Reciprocidad': round(reciprocidad, 4),
+        'Clustering binario (BCC)': round(clustering_binario, 4),
+        'Longitud promedio de camino': round(long_camino, 3),
+        'Modularidad (Infomap)': round(mod, 4),
+    }
     
 def graficar_migraciones_africa(
         
