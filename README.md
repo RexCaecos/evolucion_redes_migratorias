@@ -13,3 +13,4 @@ Para reproducir correctamente el `cuaderno_de_trabajo`:
 * networkx
 * IPython
 * tqdm
+* infomap
