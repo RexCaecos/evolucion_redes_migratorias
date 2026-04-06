@@ -5,11 +5,15 @@ Para reproducir correctamente el `cuaderno_de_trabajo`:
 1. Crear un nuevo entorno de Python.
 2. Instalar Jupyter Notebook.
 3. Instalar las siguientes librerías:
+
 * cartopy
+* infomap
+* IPython
 * matplotlib
-* seaborn
+* networkx
 * numpy
 * pandas
-* networkx
-* IPython
+* scipy
+* seaborn
+* shapely
 * tqdm

@@ -13,6 +13,8 @@ import pandas as pd
 import seaborn as sns
 import seaborn.objects as so
 import textwrap
+import infomap
+
 
 
 from pathlib import Path
@@ -26,7 +28,7 @@ from matplotlib.colors import TwoSlopeNorm
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from tqdm.notebook import tqdm
-
+from networkx.algorithms.community.quality import modularity
 
 
 
@@ -763,6 +765,263 @@ def graficar_red_corredores(
 
 
 
+def calcular_cuadro_global(df: pd.DataFrame, año: int) -> dict:
+
+    # --- FILTRO ---
+    d = df[(df['año'] == año) & (df['iso3_orig'] != 'ZZZ')].copy()
+
+    # --- GRAFO DIRIGIDO PONDERADO ---
+    G = nx.DiGraph()
+    for _, r in d.iterrows():
+        u, v, w = r['iso3_orig'], r['iso3_des'], r['migrantes']
+        if w > 0:
+            if G.has_edge(u, v):
+                G[u][v]['weight'] += w
+            else:
+                G.add_edge(u, v, weight=w)
+
+    # --- BÁSICOS ---
+    nodos = G.number_of_nodes()
+    aristas = G.number_of_edges()
+    densidad = nx.density(G)
+    reciprocidad = nx.reciprocity(G)
+
+    # --- CLUSTERING BINARIO (como en tu cuadro) ---
+    G_undir = G.to_undirected()
+    clustering_binario = nx.average_clustering(G_undir)
+
+    # --- LONGITUD DE CAMINO (SCC) ---
+    scc = max(nx.strongly_connected_components(G), key=len)
+    G_scc = G.subgraph(scc).copy()
+
+    if G_scc.number_of_nodes() > 1:
+        long_camino = nx.average_shortest_path_length(G_scc)
+    else:
+        long_camino = float('nan')
+
+    # --- INFOMAP ---
+    nodos_lista = list(G.nodes())
+    nodo_a_id = {n: i for i, n in enumerate(nodos_lista)}
+
+    im = infomap.Infomap("--directed --silent")
+    for u, v, data in G.edges(data=True):
+        im.add_link(nodo_a_id[u], nodo_a_id[v], data['weight'])
+    im.run()
+
+    # comunidades
+    comunidades_dict = {}
+    for node in im.nodes:
+        cid = node.module_id
+        comunidades_dict.setdefault(cid, set()).add(nodos_lista[node.node_id])
+    comunidades = list(comunidades_dict.values())
+
+    # --- MODULARIDAD ---
+    mod = modularity(G_undir, comunidades, weight='weight')
+
+    return {
+        'Nodos': nodos,
+        'Aristas': aristas,
+        'Densidad': round(densidad, 4),
+        'Reciprocidad': round(reciprocidad, 4),
+        'Clustering binario (BCC)': round(clustering_binario, 4),
+        'Longitud promedio de camino': round(long_camino, 3),
+        'Modularidad (Infomap)': round(mod, 4),
+    }
+
+
+# GRAFO MIGRATORIO + COMUNIDADES + VISUALIZACIÓN
+def construir_grafo_migratorio(df, año):
+    """
+    Construye grafo dirigido desde df_migras_90_24
+    excluye Otros'
+    """
+
+    import networkx as nx
+    import pandas as pd
+
+    d = df[df['año'] == año].copy()
+
+    # eliminar "Otros"
+    d = d[
+        (d['iso3_orig'] != 'ZZZ') &
+        (d['iso3_des'] != 'ZZZ')
+    ]
+
+    G = nx.DiGraph()
+
+    # =========================
+    # NODOS
+    # =========================
+    df_origen = d[['iso3_orig','origen_ES','lat_orig','lon_orig','poblacion_orig']] \
+        .rename(columns={
+            'iso3_orig':'iso',
+            'origen_ES':'nombre',
+            'lat_orig':'lat',
+            'lon_orig':'lon',
+            'poblacion_orig':'poblacion'
+        })
+
+    df_destino = d[['iso3_des','destino_ES','lat_des','lon_des','poblacion_des']] \
+        .rename(columns={
+            'iso3_des':'iso',
+            'destino_ES':'nombre',
+            'lat_des':'lat',
+            'lon_des':'lon',
+            'poblacion_des':'poblacion'
+        })
+
+    df_nodos = (
+        pd.concat([df_origen, df_destino])
+        .drop_duplicates(subset=['iso'])
+    )
+
+    for _, r in df_nodos.iterrows():
+        G.add_node(
+            r['iso'],
+            nombre=r['nombre'],
+            lat=r['lat'],
+            lon=r['lon'],
+            poblacion=r['poblacion']
+        )
+
+    # =========================
+    # ARISTAS
+    # =========================
+    for _, r in d.iterrows():
+
+        w = r['migrantes']
+        if w <= 0:
+            continue
+
+        u = r['iso3_orig']
+        v = r['iso3_des']
+
+        if G.has_edge(u, v):
+            G[u][v]['weight'] += w
+        else:
+            G.add_edge(u, v, weight=w)
+
+    return G
+
+
+def calcular_comunidades_infomap(G):
+    import infomap
+
+    nodos = list(G.nodes())
+    nodo_a_id = {n: i for i, n in enumerate(nodos)}
+
+    im = infomap.Infomap("--directed --silent")
+
+    for u, v, data in G.edges(data=True):
+        im.add_link(nodo_a_id[u], nodo_a_id[v], data.get('weight', 1))
+
+    im.run()
+
+    for node in im.nodes:
+        G.nodes[nodos[node.node_id]]['community_infomap'] = node.module_id
+
+    return G
+
+def listar_comunidades(G, metodo='infomap', ordenar=True):
+    """
+    Devuelve un diccionario {comunidad: [paises]}
+    """
+
+    community_attr = f'community_{metodo}'
+
+    comunidades = {}
+
+    for nodo, data in G.nodes(data=True):
+        cid = data.get(community_attr)
+
+        if cid is None:
+            continue
+
+        nombre = data.get('nombre', nodo)
+
+        comunidades.setdefault(cid, []).append(nombre)
+
+    # Ordenar países dentro de cada comunidad
+    for cid in comunidades:
+        comunidades[cid] = sorted(comunidades[cid])
+
+    # Ordenar comunidades por tamaño
+    if ordenar:
+        comunidades = dict(
+            sorted(comunidades.items(), key=lambda x: len(x[1]), reverse=True)
+        )
+
+    return comunidades
+
+
+
+def plot_comunidades_mapa(G, metodo='infomap', titulo='Comunidades'):
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import cartopy.crs as ccrs
+    import cartopy.feature as cfeature
+    import matplotlib.patches as mpatches
+    from scipy.spatial import ConvexHull
+
+    community_attr = f'community_{metodo}'
+
+    comunidades = sorted(set(
+        G.nodes[n].get(community_attr, -1)
+        for n in G.nodes()
+        if G.nodes[n].get(community_attr, -1) != -1
+    ))
+
+    num_comunidades = len(comunidades)
+
+    # colores
+    if num_comunidades <= 10:
+        colors = plt.cm.tab10.colors
+    elif num_comunidades <= 20:
+        colors = plt.cm.tab20.colors
+    else:
+        colors = plt.cm.gist_ncar(np.linspace(0, 1, num_comunidades))
+
+    color_map = {c: colors[i % len(colors)] for i, c in enumerate(comunidades)}
+
+    fig, ax = plt.subplots(figsize=(24,14), subplot_kw={'projection': ccrs.PlateCarree()})
+
+    ax.add_feature(cfeature.LAND, alpha=0.3)
+    ax.add_feature(cfeature.OCEAN, alpha=0.2)
+    ax.add_feature(cfeature.COASTLINE)
+    ax.add_feature(cfeature.BORDERS, linewidth=0.3)
+
+    # polígonos
+    for c in comunidades:
+        coords = [
+            (G.nodes[n]['lon'], G.nodes[n]['lat'])
+            for n in G.nodes()
+            if G.nodes[n].get(community_attr) == c
+        ]
+
+        if len(coords) >= 3:
+            try:
+                hull = ConvexHull(np.array(coords))
+                poly = mpatches.Polygon(
+                    np.array(coords)[hull.vertices],
+                    alpha=0.2,
+                    color=color_map[c],
+                    transform=ccrs.PlateCarree()
+                )
+                ax.add_patch(poly)
+            except:
+                pass
+
+    # nodos
+    lons = [G.nodes[n]['lon'] for n in G.nodes()]
+    lats = [G.nodes[n]['lat'] for n in G.nodes()]
+    cols = [color_map.get(G.nodes[n].get(community_attr), '#808080') for n in G.nodes()]
+
+    ax.scatter(lons, lats, c=cols, s=120, edgecolors='black', linewidths=0.5)
+
+    ax.set_title(titulo)
+
+    plt.show()
+
     
 def graficar_migraciones_africa(
         
@@ -1315,7 +1574,8 @@ def migracion_argentina(
     max_migrantes: int,
     pais_max_migrantes: str,
     min_migrantes: int,
-    año: int, 
+    pais_min_migrantes: str,
+    año: int,
     **args
 ) -> Figure | Axes:
    
@@ -1323,8 +1583,11 @@ def migracion_argentina(
     # Tamaño del gráfico
     tam_figura = (20,10)  
     # Márgenes que permiten regular el zoom sobre el mapa
-    margen_lon = 7
-    margen_lat = 20
+    enfocar = args.get('enfocar', False)
+    margen_izq = args.get('margen_izq', 0)
+    margen_sup = args.get('margen_sup', 0)    
+    margen_der = args.get('margen_der', 0)
+    margen_inf = args.get('margen_inf', 0)
     # Colores del mapa
     agua = args.get('agua','#e6e6e6')
     tierra = args.get('tierra', '#b0b0b0')
@@ -1332,16 +1595,16 @@ def migracion_argentina(
     continentes = args.get('continentes', '#8a8a8a')   
     # Colores del grafo
     color_titulo = '#ffffff'
-    color_nodos = '#2cffb2'
-    color_emigracion = '#ff2f32'
-    color_inmigracion = '#2600ff'
+    color_nodos = '#3af3ac'#3dffb5'#2cffb2'
+    color_emigracion = '#d83030'#ff2f32'
+    color_inmigracion = '#1a595a'#154647'#2600ff'
     color_etq_pais = '#101010'
-    alfa_nodos = .5
+    alfa_nodos = .6
     alfa_aristas = .7
     alfa_etiquetas = .7 
     # Tamaños de fuentes
-    tam_tex_etq = 15 # nodos
-    tam_tex_ref = 13 # referencias
+    tam_tex_etq = 16 # nodos
+    tam_tex_ref = 39 # referencias
         
     fig, eje = plt.subplots(
         figsize=tam_figura, 
@@ -1364,7 +1627,17 @@ def migracion_argentina(
     pos_proj = {}
     for n, (lon, lat) in pos_nodos.items():
         x, y = ccrs.Robinson().transform_point(lon, lat, ccrs.PlateCarree())
-        pos_proj[n] = (x, y)
+        pos_proj[n] = (x, y)    
+    # Para ajustar la región del mapa donde hacemos foco
+    if enfocar:
+        lons = [pos[0] for pos in pos_nodos.values()]
+        lats = [pos[1] for pos in pos_nodos.values()]     
+        eje.set_extent([
+            min(lons) - margen_der,
+            max(lons) + margen_izq,
+            min(lats) - margen_inf,
+            max(lats) + margen_sup
+        ], crs=ccrs.PlateCarree())
     
     # NODOS
     pesos_nodos = nx.get_node_attributes(red, 'poblacion')
@@ -1416,26 +1689,19 @@ def migracion_argentina(
     ref_nodo = mpatches.Patch(color=to_rgba(color_nodos, alpha=alfa_nodos), label='Población')
     ref_emig = mpatches.Patch(color=to_rgba(color_emigracion, alpha=alfa_aristas), label='Emigrantes')
     ref_inmig = mpatches.Patch(color=to_rgba(color_inmigracion, alpha=alfa_aristas), label='Inmigrantes')
-    ref_min_mig = mpatches.Patch(
-        color=to_rgba(color_inmigracion, alpha=0), 
-        label=f'Mín. migrantes: {min_migrantes}'
-    )        
-    ref_max_mig = mpatches.Patch(
-        color=to_rgba(color_inmigracion, alpha=0), 
-        label=f'Máx. migrantes: {max_migrantes} ({pais_max_migrantes})'
-    )
 
-    lista_ref = [ref_nodo, ref_emig, ref_inmig, ref_min_mig, ref_max_mig]
+    lista_ref = [ref_inmig, ref_emig, ref_nodo]
     ref = eje.legend(
         handles=lista_ref,
-        handlelength=2,
+        handlelength=.7,
         handleheight=.7,
-        loc='lower left',
-        fontsize=tam_tex_ref,
+        loc='lower center',        
+        prop={'weight': 'normal', 'size': tam_tex_ref},
         frameon=True,
         facecolor='none',
         framealpha=.9,
         edgecolor='none',
+        ncol=len(lista_ref)
     )
     # Color del texto de los ítems
     for text in ref.get_texts():
