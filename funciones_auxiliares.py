@@ -1574,7 +1574,8 @@ def migracion_argentina(
     max_migrantes: int,
     pais_max_migrantes: str,
     min_migrantes: int,
-    año: int, 
+    pais_min_migrantes: str,
+    año: int,
     **args
 ) -> Figure | Axes:
    
@@ -1582,8 +1583,11 @@ def migracion_argentina(
     # Tamaño del gráfico
     tam_figura = (20,10)  
     # Márgenes que permiten regular el zoom sobre el mapa
-    margen_lon = 7
-    margen_lat = 20
+    enfocar = args.get('enfocar', False)
+    margen_izq = args.get('margen_izq', 0)
+    margen_sup = args.get('margen_sup', 0)    
+    margen_der = args.get('margen_der', 0)
+    margen_inf = args.get('margen_inf', 0)
     # Colores del mapa
     agua = args.get('agua','#e6e6e6')
     tierra = args.get('tierra', '#b0b0b0')
@@ -1591,16 +1595,16 @@ def migracion_argentina(
     continentes = args.get('continentes', '#8a8a8a')   
     # Colores del grafo
     color_titulo = '#ffffff'
-    color_nodos = '#2cffb2'
-    color_emigracion = '#ff2f32'
-    color_inmigracion = '#2600ff'
+    color_nodos = '#3af3ac'#3dffb5'#2cffb2'
+    color_emigracion = '#d83030'#ff2f32'
+    color_inmigracion = '#1a595a'#154647'#2600ff'
     color_etq_pais = '#101010'
-    alfa_nodos = .5
+    alfa_nodos = .6
     alfa_aristas = .7
     alfa_etiquetas = .7 
     # Tamaños de fuentes
-    tam_tex_etq = 15 # nodos
-    tam_tex_ref = 13 # referencias
+    tam_tex_etq = 16 # nodos
+    tam_tex_ref = 39 # referencias
         
     fig, eje = plt.subplots(
         figsize=tam_figura, 
@@ -1623,7 +1627,17 @@ def migracion_argentina(
     pos_proj = {}
     for n, (lon, lat) in pos_nodos.items():
         x, y = ccrs.Robinson().transform_point(lon, lat, ccrs.PlateCarree())
-        pos_proj[n] = (x, y)
+        pos_proj[n] = (x, y)    
+    # Para ajustar la región del mapa donde hacemos foco
+    if enfocar:
+        lons = [pos[0] for pos in pos_nodos.values()]
+        lats = [pos[1] for pos in pos_nodos.values()]     
+        eje.set_extent([
+            min(lons) - margen_der,
+            max(lons) + margen_izq,
+            min(lats) - margen_inf,
+            max(lats) + margen_sup
+        ], crs=ccrs.PlateCarree())
     
     # NODOS
     pesos_nodos = nx.get_node_attributes(red, 'poblacion')
@@ -1675,26 +1689,19 @@ def migracion_argentina(
     ref_nodo = mpatches.Patch(color=to_rgba(color_nodos, alpha=alfa_nodos), label='Población')
     ref_emig = mpatches.Patch(color=to_rgba(color_emigracion, alpha=alfa_aristas), label='Emigrantes')
     ref_inmig = mpatches.Patch(color=to_rgba(color_inmigracion, alpha=alfa_aristas), label='Inmigrantes')
-    ref_min_mig = mpatches.Patch(
-        color=to_rgba(color_inmigracion, alpha=0), 
-        label=f'Mín. migrantes: {min_migrantes}'
-    )        
-    ref_max_mig = mpatches.Patch(
-        color=to_rgba(color_inmigracion, alpha=0), 
-        label=f'Máx. migrantes: {max_migrantes} ({pais_max_migrantes})'
-    )
 
-    lista_ref = [ref_nodo, ref_emig, ref_inmig, ref_min_mig, ref_max_mig]
+    lista_ref = [ref_inmig, ref_emig, ref_nodo]
     ref = eje.legend(
         handles=lista_ref,
-        handlelength=2,
+        handlelength=.7,
         handleheight=.7,
-        loc='lower left',
-        fontsize=tam_tex_ref,
+        loc='lower center',        
+        prop={'weight': 'normal', 'size': tam_tex_ref},
         frameon=True,
         facecolor='none',
         framealpha=.9,
         edgecolor='none',
+        ncol=len(lista_ref)
     )
     # Color del texto de los ítems
     for text in ref.get_texts():
