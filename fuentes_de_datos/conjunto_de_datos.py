@@ -759,5 +759,5 @@ tex_econ = '\n• df_economicas: desempleo, inflación, PBI, GINI, HDI.'
 dfs_disponibles = (
     tex_m49 + tex_pobla + tex_coord + tex_migras_orig + tex_migras + tex_migras_90_24 + tex_econ
 )
-print(f'\nDatos disponibles\n{'-'*len('Datos disponibles')}{dfs_disponibles}')
+#print(f'\nDatos disponibles\n{'-'*len('Datos disponibles')}{dfs_disponibles}')
 

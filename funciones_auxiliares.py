@@ -2610,9 +2610,11 @@ def plot_balance_migratorio(año, df, otro=False):
     # cmap = plt.cm.RdYlGn
 
     # Normalización para compara entre dos fechas
+    print(min(balance_dict.values()),max(balance_dict.values()) )
     vmin = min(min(balance_dict.values()), min(balance_dict_otro.values()))
     vmax = max(max(balance_dict.values()), max(balance_dict_otro.values()))
     abs_max = max(abs(vmin), abs(vmax))
+    print(vmin, vmax, abs_max)
     norm = TwoSlopeNorm(vmin=-abs_max, vcenter=0, vmax=abs_max)
     # norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
     # cmap = plt.cm.RdYlGn
