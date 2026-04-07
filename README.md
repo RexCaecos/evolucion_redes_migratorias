@@ -1,19 +1,11 @@
 # Evolución estructural de la red migratoria internacional (1990 – 2024)
 
-Para reproducir correctamente el `cuaderno_de_trabajo`:
+Para reproducir correctamente el `cuaderno_de_trabajo` el entorno Python requiere las siguientes librerías:
 
-1. Crear un nuevo entorno de Python.
-2. Instalar Jupyter Notebook.
-3. Instalar las siguientes librerías:
-
-* cartopy
-* infomap
-* IPython
-* matplotlib
-* networkx
-* numpy
-* pandas
-* scipy
-* seaborn
-* shapely
-* tqdm
+- **Cómputo y análisis de datos:** pandas, numpy, scipy.
+- **Visualización y geometría:** matplotlib, seaborn, shapely. 
+- **Redes complejas:** networkx, infomap.
+- **Geoespacial:** geopandas, pyproj, cartopy.
+- **Extracción de datos web:** requests, beautifulsoup4, lxml.
+- **Utilidades:** tqdm, openpyxl.
+- **Entorno interactivo:** IPython.
